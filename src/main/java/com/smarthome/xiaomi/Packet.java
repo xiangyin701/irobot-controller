@@ -5,6 +5,7 @@ import com.smarthome.utils.ConversionUtils;
 import javax.crypto.*;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.security.*;
@@ -22,10 +23,12 @@ public class Packet {
     // Properties to generate packet
     private byte[] token;
 
-    public Packet(byte[] token, byte[] serial, int stamp) {
+    public Packet(byte[] token, byte[] serial, int stamp, byte[] payload) {
         this.token = token;
         this.serial = serial;
         this.stamp = stamp;
+        this.rawData = payload;
+        this.unknown = new byte[4];
     }
 
     private Packet() {
@@ -36,14 +39,32 @@ public class Packet {
         Packet packet = new Packet();
         packet.unknown = new byte[] {(byte)0xff, (byte)0xff, (byte)0xff, (byte)0xff};
         packet.serial = new byte[] {(byte)0xff, (byte)0xff, (byte)0xff, (byte)0xff};
-        packet.stamp = 0;
+        packet.stamp = 999999;
         return packet;
     }
 
+    public static Packet from(byte[] received) {
+        Packet packet = new Packet();
+        packet.magic = Arrays.copyOfRange(received, 0,2);
+        int length = ConversionUtils.bytesToInt(received, 2,3);
+        packet.unknown = Arrays.copyOfRange(received, 4,8);
+        packet.serial = Arrays.copyOfRange(received, 8, 12);
+        packet.stamp = ConversionUtils.bytesToInt(received, 12, 15);
+        packet.token = Arrays.copyOfRange(received, 16, 32);
+        return packet;
+    }
+
+    public byte[] getID () {
+        return this.serial;
+    }
+
+    public int getStamp() {
+        return this.stamp;
+    }
 
     public byte[] serialize() throws IOException {
         if (this.rawData == null) {
-            byte[] handshake = new byte[32 * 4];
+            byte[] handshake = new byte[32];
             Arrays.fill(handshake, (byte)0xff);
             handshake[0] = 0x21;
             handshake[1] = 0x31;
@@ -68,7 +89,7 @@ public class Packet {
             System.arraycopy(temp, 0, input, 0, temp.length);
             System.arraycopy(token, 0, input, temp.length, token.length);
             iv = md5.digest(input);
-            Cipher cipher = Cipher.getInstance("AES/CNC/PKCS7Padding");
+            Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
             SecretKeySpec secretKeySpec = new SecretKeySpec(key, "AES");
             AlgorithmParameterSpec paramSpec = new IvParameterSpec(iv);
             cipher.init(Cipher.ENCRYPT_MODE, secretKeySpec, paramSpec);
@@ -89,7 +110,7 @@ public class Packet {
         checksumOutput.write(unknown);
         checksumOutput.write(serial);
         checksumOutput.write(ConversionUtils.intToBytes(stamp));
-        checksumOutput.write(new byte[128]);
+        checksumOutput.write(this.token);
         checksumOutput.write(data);
         md5.reset();
         byte[] checksum = md5.digest(checksumOutput.toByteArray());
@@ -104,6 +125,8 @@ public class Packet {
         out.write(data);
         return out.toByteArray();
     }
+
+
 
 
 

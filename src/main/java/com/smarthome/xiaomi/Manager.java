@@ -45,6 +45,7 @@ public class Manager {
                     DatagramPacket response = new DatagramPacket(buffer, buffer.length);
                     socket.receive(response);
                     System.out.println("Packet received!");
+
                 } catch (Exception e) {
 
                 }
